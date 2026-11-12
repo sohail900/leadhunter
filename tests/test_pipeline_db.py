@@ -153,7 +153,7 @@ async def test_prefiltered_leads_are_stored_as_rejected_with_the_reason(db_sessi
         "unpaid": LeadStatus.REJECTED,
         "good": LeadStatus.NEW,
     }
-    reasons = (await db_session.scalars(select(Event.payload["reason"].astext))).all()
+    reasons = (await db_session.scalars(select(Event.payload["reason"].as_string()))).all()
     assert sorted(reasons) == [
         "deal-breaker keyword: unpaid",
         "offering services, not hiring",

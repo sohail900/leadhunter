@@ -31,7 +31,7 @@ class Stats:
 
 def _reached(*statuses: S):
     return func.count(Lead.id.distinct()).filter(
-        Event.payload["to"].astext.in_([s.value for s in statuses])
+        Event.payload["to"].as_string().in_([s.value for s in statuses])
     )
 
 

@@ -3,10 +3,10 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from leadhunter.config import get_settings
 from leadhunter.db.models import Base
+from leadhunter.db.session import make_engine
 
 config = context.config
 if config.config_file_name is not None:
@@ -33,7 +33,7 @@ def _run(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(get_settings().database_url)
+    engine = make_engine(get_settings().database_url)
     async with engine.connect() as connection:
         await connection.run_sync(_run)
     await engine.dispose()

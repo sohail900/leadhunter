@@ -3,12 +3,13 @@ import os
 from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from telegram.request import BaseRequest
 
 from leadhunter.bot.app import build_application
 from leadhunter.config import Settings
 from leadhunter.db.models import Base
+from leadhunter.db.session import make_engine
 
 OWNER_CHAT_ID = 111
 BOT_USER = {"id": 999, "is_bot": True, "first_name": "LeadHunter", "username": "leadhunter_bot"}
@@ -161,7 +162,7 @@ async def db_session():
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
         pytest.skip("TEST_DATABASE_URL not set")
-    engine = create_async_engine(url)
+    engine = make_engine(url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

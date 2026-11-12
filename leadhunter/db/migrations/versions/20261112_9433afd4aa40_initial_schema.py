@@ -21,14 +21,14 @@ def upgrade() -> None:
     sa.Column('author', sa.String(length=255), nullable=True),
     sa.Column('contact_hint', sa.String(length=255), nullable=True),
     sa.Column('posted_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('fetched_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('fetched_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('content_hash', sa.String(length=64), nullable=False),
     sa.Column('status', sa.String(length=20), server_default='new', nullable=False),
     sa.Column('score', sa.Float(), nullable=True),
-    sa.Column('score_reasons', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('score_reasons', sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), 'postgresql'), nullable=True),
     sa.Column('budget_min', sa.Integer(), nullable=True),
     sa.Column('budget_max', sa.Integer(), nullable=True),
-    sa.Column('tech_stack', postgresql.ARRAY(sa.String(length=100)), nullable=True),
+    sa.Column('tech_stack', sa.JSON().with_variant(postgresql.ARRAY(sa.String(length=100)), 'postgresql'), nullable=True),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_leads')),
     sa.UniqueConstraint('source', 'external_id', name='uq_leads_source_external_id')
     )
@@ -49,8 +49,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('lead_id', sa.Integer(), nullable=True),
     sa.Column('type', sa.String(length=50), nullable=False),
-    sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()), server_default='{}', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('payload', sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), 'postgresql'), server_default='{}', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['lead_id'], ['leads.id'], name=op.f('fk_events_lead_id_leads'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_events'))
     )

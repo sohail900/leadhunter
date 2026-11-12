@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Enum,
@@ -13,11 +14,32 @@ from sqlalchemy import (
     MetaData,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+JsonType = JSON().with_variant(JSONB(), "postgresql")
+StringList = JSON().with_variant(ARRAY(String(100)), "postgresql")
+
+
+class UtcDateTime(TypeDecorator):
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class LeadStatus(StrEnum):
@@ -88,17 +110,17 @@ class Lead(Base):
     body: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str | None] = mapped_column(String(255))
     contact_hint: Mapped[str | None] = mapped_column(String(255))
-    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    posted_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    fetched_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     content_hash: Mapped[str] = mapped_column(String(64))
     status: Mapped[LeadStatus] = mapped_column(
         _str_enum(LeadStatus, 20), default=LeadStatus.NEW, server_default=LeadStatus.NEW.value
     )
     score: Mapped[float | None] = mapped_column(Float)
-    score_reasons: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    score_reasons: Mapped[dict[str, Any] | None] = mapped_column(JsonType)
     budget_min: Mapped[int | None] = mapped_column(Integer)
     budget_max: Mapped[int | None] = mapped_column(Integer)
-    tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String(100)))
+    tech_stack: Mapped[list[str] | None] = mapped_column(StringList)
 
     drafts: Mapped[list["Draft"]] = relationship(back_populates="lead")
 
@@ -124,15 +146,15 @@ class Event(Base):
         ForeignKey("leads.id", ondelete="CASCADE"), index=True
     )
     type: Mapped[str] = mapped_column(String(50), index=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    payload: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
 
 
 class AppState(Base):
     __tablename__ = "app_state"
 
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
-    value: Mapped[Any] = mapped_column(JSONB)
+    value: Mapped[Any] = mapped_column(JsonType)
 
 
 class Followup(Base):
@@ -141,5 +163,5 @@ class Followup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
-    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    due_at: Mapped[datetime] = mapped_column(UtcDateTime)
     done: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

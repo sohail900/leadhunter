@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Personal tool that finds freelance leads, scores them, drafts proposals and sends them to Telegram for approval."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "aiosqlite>=0.22.1",
     "alembic>=1.13",
     "anthropic>=2.8.0",
     "apscheduler>=3.10,<4",

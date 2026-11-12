@@ -19,7 +19,7 @@ CsvList = Annotated[list[str], NoDecode, BeforeValidator(_split_csv)]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://leadhunter:leadhunter@localhost:5432/leadhunter"
+    database_url: str = "sqlite+aiosqlite:///data/leadhunter.db"
 
     telegram_bot_token: str = ""
     telegram_chat_id: int = 0

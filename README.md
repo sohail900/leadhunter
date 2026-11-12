@@ -78,6 +78,35 @@ you also need [uv](https://docs.astral.sh/uv/).
 Remote OK, We Work Remotely and Hacker News need no credentials. The other
 sources and email sending are optional and described below.
 
+### Running without Docker
+
+On a server where Docker is not available (shared hosting, for example), the
+bot runs with plain Python and keeps its data in a file, `data/leadhunter.db`.
+Nothing else has to be installed.
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+$HOME/.local/bin/uv venv --python 3.12
+.venv/bin/python -m ensurepip
+.venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env        # then fill in the two Telegram values
+.venv/bin/python main.py
+```
+
+`main.py` applies the database migrations and starts the bot. To keep it
+running after you log out:
+
+```sh
+nohup .venv/bin/python main.py >> data/bot.log 2>&1 &
+```
+
+Starting it twice is harmless: the second copy sees the first and exits. That
+makes it safe to add the same command to cron as a restart after a reboot or a
+crash.
+
+With Docker Compose the bot uses Postgres; with `python main.py` it uses the
+SQLite file named in `DATABASE_URL`. Both are tested.
+
 ### If Telegram is blocked on your network
 
 The bot talks to Telegram's HTTPS Bot API (`api.telegram.org`). Where that is

@@ -13,7 +13,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table('app_state',
     sa.Column('key', sa.String(length=50), nullable=False),
-    sa.Column('value', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('value', sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), 'postgresql'), nullable=False),
     sa.PrimaryKeyConstraint('key', name=op.f('pk_app_state'))
     )
 

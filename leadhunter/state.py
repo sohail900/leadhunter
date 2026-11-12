@@ -1,6 +1,5 @@
 from typing import Any
 
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from leadhunter.db.models import AppState
@@ -15,10 +14,12 @@ async def get_state(session: AsyncSession, key: str, default: Any = None) -> Any
 
 
 async def set_state(session: AsyncSession, key: str, value: Any) -> None:
-    statement = insert(AppState).values(key=key, value=value)
-    await session.execute(
-        statement.on_conflict_do_update(index_elements=["key"], set_={"value": value})
-    )
+    row = await session.get(AppState, key)
+    if row is None:
+        session.add(AppState(key=key, value=value))
+    else:
+        row.value = value
+    await session.flush()
 
 
 async def get_threshold(session: AsyncSession, default: int) -> int:
