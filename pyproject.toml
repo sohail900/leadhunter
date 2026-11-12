@@ -1,0 +1,50 @@
+[project]
+name = "leadhunter"
+version = "0.1.0"
+description = "Personal tool that finds freelance leads, scores them, drafts proposals and sends them to Telegram for approval."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.13",
+    "anthropic>=2.8.0",
+    "apscheduler>=3.10,<4",
+    "asyncpg>=0.29",
+    "asyncpraw>=8.0.3",
+    "discord-py>=2.7.1",
+    "feedparser>=6.0.14",
+    "httpx>=0.28.1",
+    "imap-tools>=1.16.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-telegram-bot[socks]>=21",
+    "pyyaml>=6",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "structlog>=24.1",
+    "telethon>=1.45.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["leadhunter"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["leadhunter/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]

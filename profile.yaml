@@ -1,0 +1,31 @@
+name: Your Name
+headline: Full-stack developer building web apps end to end
+
+skills:
+  - TypeScript
+  - React
+  - Next.js
+  - Node.js
+  - Python
+  - PostgreSQL
+
+rate:
+  hourly_usd: 40
+  min_project_usd: 500
+
+portfolio:
+  - name: Example project
+    description: One or two sentences on what you built and the result for the client.
+    tech: [Next.js, PostgreSQL]
+    url: https://example.com
+
+preferences:
+  deal_breaker_keywords:
+    - unpaid
+    - equity only
+    - revenue share
+  preferred_work:
+    - MVPs for early-stage startups
+    - Internal tools and dashboards
+  avoid:
+    - WordPress theme tweaks

@@ -1,0 +1,71 @@
+{
+  "_note": "Hand-written in the shape of Reddit's /r/<subs>/new listing (submission 'data' fields). Not a live capture: Reddit needs OAuth credentials to fetch.",
+  "posts": [
+    {
+      "id": "1abc001",
+      "title": "[Hiring] Full-stack dev to finish a Next.js + Supabase booking app ($1,500 - $2,000)",
+      "selftext": "We have a half-built booking app for a small yoga studio chain.\n\n**Stack:** Next.js 14, Supabase, Stripe.\n\nNeed someone to finish the checkout flow and admin calendar. Budget $1,500 - $2,000, about 3 weeks.\n\nEmail me at maria@studioflow.example with similar work.",
+      "author": "studioflow_maria",
+      "created_utc": 1794480000.0,
+      "permalink": "/r/forhire/comments/1abc001/hiring_fullstack_dev_to_finish_a_nextjs_supabase/",
+      "link_flair_text": "Hiring",
+      "subreddit": "forhire",
+      "url": "https://www.reddit.com/r/forhire/comments/1abc001/hiring_fullstack_dev_to_finish_a_nextjs_supabase/"
+    },
+    {
+      "id": "1abc002",
+      "title": "[For Hire] Senior React/Node developer, 8 years experience, $40/hr",
+      "selftext": "Hi, I build web apps. Portfolio in profile. DM me.",
+      "author": "dev_for_hire_99",
+      "created_utc": 1794481000.0,
+      "permalink": "/r/forhire/comments/1abc002/for_hire_senior_reactnode_developer/",
+      "link_flair_text": "For Hire",
+      "subreddit": "forhire",
+      "url": "https://www.reddit.com/r/forhire/comments/1abc002/for_hire_senior_reactnode_developer/"
+    },
+    {
+      "id": "1abc003",
+      "title": "[TASK] Fix a bug in my Python scraper, $30",
+      "selftext": "Script throws a KeyError on some pages. Should be quick. Bid below then DM.",
+      "author": "quick_task_guy",
+      "created_utc": 1794482000.0,
+      "permalink": "/r/slavelabour/comments/1abc003/task_fix_a_bug_in_my_python_scraper_30/",
+      "link_flair_text": "Task",
+      "subreddit": "slavelabour",
+      "url": "https://www.reddit.com/r/slavelabour/comments/1abc003/task_fix_a_bug_in_my_python_scraper_30/"
+    },
+    {
+      "id": "1abc004",
+      "title": "[OFFER] I will build your landing page for $50",
+      "selftext": "Fast turnaround.",
+      "author": "landing_pages_fast",
+      "created_utc": 1794483000.0,
+      "permalink": "/r/slavelabour/comments/1abc004/offer_i_will_build_your_landing_page_for_50/",
+      "link_flair_text": "Offer",
+      "subreddit": "slavelabour",
+      "url": "https://www.reddit.com/r/slavelabour/comments/1abc004/offer_i_will_build_your_landing_page_for_50/"
+    },
+    {
+      "id": "1abc005",
+      "title": "Looking for a contract TypeScript engineer for a 2 month API project",
+      "selftext": "Remote, any timezone. Reply here or DM.",
+      "author": null,
+      "created_utc": 1794484000.0,
+      "permalink": "/r/jobbit/comments/1abc005/looking_for_a_contract_typescript_engineer/",
+      "link_flair_text": "Hiring",
+      "subreddit": "jobbit",
+      "url": "https://www.reddit.com/r/jobbit/comments/1abc005/looking_for_a_contract_typescript_engineer/"
+    },
+    {
+      "id": "1abc006",
+      "title": "Weekly discussion thread",
+      "selftext": "Talk about anything.",
+      "author": "AutoModerator",
+      "created_utc": 1794485000.0,
+      "permalink": "/r/remotejs/comments/1abc006/weekly_discussion_thread/",
+      "link_flair_text": null,
+      "subreddit": "remotejs",
+      "url": "https://www.reddit.com/r/remotejs/comments/1abc006/weekly_discussion_thread/"
+    }
+  ]
+}
