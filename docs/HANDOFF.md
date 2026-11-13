@@ -7,17 +7,57 @@ documentation is `README.md`.
 ## What this is
 
 A single-user tool that finds freelance full-stack leads, scores them with an
-LLM, drafts three proposal variants, and sends them to the owner on Telegram
-for approval. Nothing is ever sent to a client without the owner pressing a
-button in Telegram. Telegram is the only interface; there is no web UI.
+LLM, drafts three proposal variants, sends them to the owner on Telegram, and
+then holds the conversation with the client. Telegram is the only interface;
+there is no web UI.
 
 Pipeline: collectors -> normalize -> dedupe -> pre-filter -> score -> draft ->
-Telegram card -> approve, edit or skip -> follow-up after 3 days.
+Telegram card -> approve, edit or skip -> follow-up after 3 days -> client
+conversation -> price and commitments from the owner -> deal brief.
+
+## Second session, 2026-11-13: the "project manager" loop
+
+The owner asked for the bot to act as a project manager: contact clients, talk
+to them, bring pricing to him, close, hand over a brief; to refuse anything
+that is not lead hunting; to use retrieval for better prompts; and to send an
+end-of-day report. Built in this session, uncommitted at the time of writing:
+
+- `agent/conversation.py`: one conversation per lead (`conversations`,
+  `messages` tables, migration `2fb3e31ab7ba`). The model returns reply,
+  ask_owner, deal or lost. `enforce()` and `agent/guard.py` are code-level
+  rules: no money figure the owner has not given, no deal without owner terms.
+- `inbox.py` + `jobs.inbox`: client replies read over IMAP, matched to a
+  conversation by thread references, then by sender address.
+- `agent/outreach.py`: with `/auto on`, first emails go out without approval,
+  capped by `AUTO_DAILY_LIMIT`.
+- `knowledge.py`: keyword (BM25) retrieval over `knowledge/*.md` plus won
+  proposals, fed to the drafter, the reply prompt and the chat prompt.
+- `bot/chat.py` + `agent/assistant.py`: plain messages are mapped to a fixed
+  list of actions; anything else gets `formatting.REFUSAL`.
+- `agent/report.py` + `jobs.daily_report`: the daily report and `/report`.
+
+Decisions the owner made, replacing the earlier "a human approves every
+outgoing message" rule: automatic sending exists but is off until `/auto on`;
+price, dates and commitments always go to the owner.
+
+Decided against, with the reason given to the owner: a Discord account that
+searches for and joins servers by itself, and automatic direct messages on
+Discord. A bot cannot join servers, and automating a user account breaks
+Discord's rules. Non-email channels stay manual (`/client`).
+
+Verified live with Gemini (`gemini-3.1-flash-lite`): the chat scope refusals
+and a full conversation (question, price hand-off, exact price relayed, "are you
+an AI" handed to the owner, deal). Not verified against real services: IMAP
+reading of client replies, and automatic SMTP sending.
+
+Known limit: the owner's free Gemini key allows 20 requests a day on
+`gemini-3.6-flash`, which scoring alone exhausts. Lite models have separate
+quotas.
 
 ## Current state
 
-- All six phases of the brief are built.
-- 199 tests pass on both SQLite and Postgres. Lint (`ruff`) is clean.
+- All six phases of the brief are built, plus the second-session work above.
+- 272 tests pass on both SQLite and Postgres. Lint (`ruff`) is clean.
 - The bot is deployed and was started successfully on the owner's shared web
   hosting, running with plain Python and SQLite (no Docker there).
 - Repository: https://github.com/sohail900/leadhunter (public, branch `main`).
@@ -92,7 +132,9 @@ Do not reopen these without the owner asking.
 
 ## Ground rules from the brief
 
-- A human approves every outgoing message.
+- A human approves every outgoing message unless the owner has switched
+  `/auto on`; even then price, dates and commitments need the owner.
+- The bot refuses anything that is not lead hunting.
 - Only official APIs, public feeds and the owner's own inbox. No scraping of
   logged-in pages, no automating a Discord or Upwork user account, nothing
   meant to avoid bot detection.

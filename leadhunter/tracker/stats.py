@@ -108,3 +108,8 @@ def build_guidance(stats: Stats) -> tuple[str, str]:
             + "."
         )
     return scorer, drafter
+
+
+def best_variant(stats: Stats) -> DraftVariant:
+    ranked = _best({k: v for k, v in stats.by_variant.items() if k in PROPOSAL_VARIANTS})
+    return DraftVariant(ranked[0][0]) if ranked else DraftVariant.SHORT

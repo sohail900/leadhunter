@@ -1,11 +1,15 @@
 # LeadHunter
 
 A personal tool that finds freelance full-stack leads across several platforms,
-scores them, drafts proposals, and sends them to me on Telegram for approval.
+scores them, drafts proposals, holds the conversation with the client, and
+brings every price and commitment to me on Telegram.
 
 Ground rules it is built around:
 
-- I approve every outgoing message in Telegram. Nothing reaches a client without it.
+- By default I approve every outgoing message in Telegram. With `/auto on` the
+  bot emails first messages and replies itself, but a price, a date or any
+  commitment always comes to me first, and the code blocks a figure I never gave.
+- It only does lead hunting. Anything else I ask it is refused.
 - Only official APIs, public feeds and my own inbox. No scraping of logged-in
   pages, no automated Upwork or Discord user accounts, nothing that evades bot detection.
 - Telegram is the only interface.
@@ -37,6 +41,60 @@ collectors -> normalize -> dedupe -> pre-filter -> score (LLM) -> draft (LLM) ->
    `Mark as sent` button.
 8. **Follow up.** Three days after a lead is contacted with no reply, a short
    follow-up is drafted and sent to me for approval the same way.
+9. **Talk to the client.** See the next section.
+
+## Client conversations
+
+Once a first message has gone out, the lead has a conversation.
+
+```
+client replies -> bot decides -> reply     -> sent (auto on) or shown to me with Send / Skip
+                              -> ask me    -> I answer in Telegram -> bot writes it to the client
+                              -> deal      -> lead marked won, I get the project brief
+                              -> lost      -> lead marked lost, bot stops replying
+```
+
+- **Email leads** are fully two-way: replies are read from the inbox (`IMAP_*`,
+  checked every `INBOX_INTERVAL_MINUTES`) and answered through `SMTP_*`. Both
+  must be the same mailbox.
+- **Everything else** (Reddit, Discord, job boards) cannot be sent or read by
+  the bot. I send the message myself, and pass the client's answer on with
+  `/client <id> <text>`; the bot writes the next message for me to send.
+- **What the bot answers alone:** questions about skills, past work and how I
+  work, and questions it needs answered to understand the job.
+- **What always comes to me:** price, rate, discount, deadline, start date,
+  accepting the job, contract terms, a call at a set time, and "are you an AI?".
+  I get a `Client question` card and reply to it with my answer.
+- **Price guard.** Before any message is sent or shown, the code checks it for
+  money amounts. A figure that is in neither my instructions nor a message
+  already sent turns the reply into a question for me. A deal cannot be
+  declared before I have given terms.
+- **`/auto on`** also emails the first message to drafted leads that give an
+  email address, at most `AUTO_DAILY_LIMIT` a day, using the draft variant with
+  the best reply rate so far. Leads without an email still come to me as cards.
+
+## Knowledge folder (retrieval)
+
+Files in `knowledge/` are my own notes: portfolio, services, process, answers
+to common questions. Each file is split at its headings, and for every post,
+client message or question the best-matching sections are added to the prompt,
+together with proposals that won a job. Matching is by keywords (BM25), so it
+needs no extra service or API. `knowledge/_README.md` explains what to put there.
+
+## Talking to the bot
+
+Any plain message is read by the connected model and mapped to one of the
+bot's own actions: answer from its data, list leads, show a lead, give a client
+a price or instruction, pass on what a client said, mark won or lost, pause,
+resume, report. A message about anything else gets a fixed refusal. The model
+can only pick from that list; it cannot browse, run code or do anything else.
+
+## Daily report
+
+At `REPORT_TIME` (default 18:00) and on `/report`: projects found today per
+source, how many passed scoring, messages sent, client replies, deals, what is
+waiting for me, then every client in conversation with name or email, project
+brief, status and the last message sent, then today's leads not contacted yet.
 
 ## Setup
 
@@ -134,6 +192,10 @@ After changing `.env`: `docker compose up -d`.
 
 | Command | What it does |
 |---|---|
+| plain text | Ask or instruct in plain words, for example "tell #12 the price is 800" |
+| `/report` | Today's report |
+| `/auto on\|off` | Let the bot send first emails and replies without asking; no argument shows the setting |
+| `/client <id> <text>` | What a client wrote to me somewhere the bot cannot read |
 | `/stats` | Found, contacted, replied, won and reply rate, per source and per draft variant |
 | `/leads` | Open leads (sent to me, approved, contacted, replied) with their IDs |
 | `/replied <id>` | The client replied |
@@ -147,7 +209,7 @@ After changing `.env`: `docker compose up -d`.
 | `/llm` | Which model is in use and which keys are saved |
 | `/disconnect [provider]` | Forget a saved key |
 
-A weekly summary arrives on Mondays at 09:05.
+A weekly summary arrives on Mondays at 09:05, and the daily report at `REPORT_TIME`.
 
 ## LLM providers
 
@@ -274,6 +336,10 @@ optionally `SMTP_FROM` / `SMTP_FROM_NAME`. For Gmail use `smtp.gmail.com`, port
 587 and an app password. Without SMTP, every approved proposal comes back to
 you as text to send yourself.
 
+**Reading client replies (IMAP).** The same `IMAP_*` settings as the Upwork
+alerts. Use the mailbox that `SMTP_FROM` sends from, so replies land where the
+bot looks. Only mail from addresses the bot has written to is read.
+
 ## Adding a collector
 
 1. Create `leadhunter/collectors/<name>.py` with a pure parsing function and a
@@ -384,13 +450,20 @@ Read the generated file in `leadhunter/db/migrations/versions/` before applying 
 leadhunter/
   collectors/   base.py and one file per source, registry in __init__.py
   pipeline/     normalize, dedupe, prefilter, scorer, drafter, runner
-  bot/          Telegram application, handlers, /connect flow, card formatting, delivery
+  bot/          Telegram application, handlers, /connect flow, card formatting, delivery,
+                deals.py (client conversation buttons and commands), chat.py (plain messages)
+  agent/        conversation.py (reply decisions, hand-off to me), guard.py (price check),
+                outreach.py (automatic first email), assistant.py (plain-message intent),
+                report.py (daily report)
   tracker/      audit events, stats and prompt feedback, follow-ups
   llm/          client.py (the one entry point), selection.py (/connect choice), providers/, prompts/
   db/           models, session, Alembic migrations
   config.py     settings from .env, profile from profile.yaml
+  knowledge.py  loads knowledge/ and retrieves matching sections
+  inbox.py      reads client replies over IMAP
   jobs.py       the scheduled jobs
   main.py       starts the scheduler and the bot
   collect_once.py, score_test.py, telegram_login.py   command-line helpers
 profile.yaml    your skills, rate, portfolio, preferences
+knowledge/      your own notes the AI may draw on
 ```

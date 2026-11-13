@@ -130,3 +130,18 @@ async def test_with_a_proxy_url_the_bot_talks_to_the_proxy(scheme, first_bytes):
     server.close()
     await server.wait_closed()
     assert received[0].startswith(first_bytes)
+
+
+async def test_startup_survives_when_the_owner_cannot_be_messaged(bot_app, telegram, monkeypatch):
+    from telegram.error import BadRequest
+
+    from leadhunter import main
+
+    async def chat_not_found(*args, **kwargs):
+        raise BadRequest("Chat not found")
+
+    monkeypatch.setattr(type(bot_app.bot), "send_message", chat_not_found)
+
+    await main.greet_owner(bot_app, OWNER_CHAT_ID)
+
+    assert telegram.sent_messages() == []

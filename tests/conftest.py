@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from telegram.request import BaseRequest
 
 from leadhunter.bot.app import build_application
-from leadhunter.config import Settings
+from leadhunter.config import Profile, Settings
 from leadhunter.db.models import Base
 from leadhunter.db.session import make_engine
 
@@ -104,14 +104,21 @@ class FakeMailer:
         self.sent: list[dict] = []
         self.error = error
 
-    async def send(self, to: str, subject: str, text: str) -> None:
+    async def send(self, to: str, subject: str, text: str, reply_to: str | None = None) -> str:
         if self.error:
             raise self.error
-        self.sent.append({"to": to, "subject": subject, "text": text})
+        sent = {"to": to, "subject": subject, "text": text}
+        self.sent.append(sent | {"reply_to": reply_to} if reply_to else sent)
+        return f"<sent-{len(self.sent)}@me.test>"
 
 
 def make_settings(**overrides) -> Settings:
-    values = {"telegram_bot_token": "123:TEST", "telegram_chat_id": OWNER_CHAT_ID, **overrides}
+    values = {
+        "telegram_bot_token": "123:TEST",
+        "telegram_chat_id": OWNER_CHAT_ID,
+        "knowledge_path": "no-knowledge-in-tests",
+        **overrides,
+    }
     return Settings(_env_file=None, **values)
 
 
@@ -150,7 +157,11 @@ async def bot_app(telegram):
 @pytest.fixture
 async def bot_app_db(telegram, mailer, db_session):
     app = build_application(
-        make_settings(), sessionmaker_for(db_session), request=telegram, mailer=mailer
+        make_settings(),
+        sessionmaker_for(db_session),
+        request=telegram,
+        mailer=mailer,
+        profile=Profile(name="Test Dev", skills=["React"]),
     )
     await app.initialize()
     yield app

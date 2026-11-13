@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import structlog
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
@@ -5,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from leadhunter.config import Profile
 from leadhunter.db.models import Draft, DraftVariant, Lead, LeadStatus
+from leadhunter.knowledge import reference_for
 from leadhunter.llm.client import LLMClient
-from leadhunter.llm.prompts import load_prompt, render_profile
+from leadhunter.llm.prompts import knowledge_section, load_prompt, render_profile
 from leadhunter.llm.providers import LLMError, LLMInvalidReply
 from leadhunter.pipeline.scorer import MAX_BODY_CHARS, format_budget
 from leadhunter.tracker.events import set_status
@@ -53,9 +56,16 @@ def _lead_block(lead: Lead) -> str:
     )
 
 
-def build_drafter_prompts(profile: Profile, lead: Lead, guidance: str = "") -> tuple[str, str]:
+def lead_query(lead: Lead) -> str:
+    return f"{lead.title}\n{' '.join(lead.tech_stack or [])}\n{lead.body[:1500]}"
+
+
+def build_drafter_prompts(
+    profile: Profile, lead: Lead, guidance: str = "", reference: str = ""
+) -> tuple[str, str]:
     system = load_prompt("drafter_system").format(
         profile=render_profile(profile),
+        knowledge=knowledge_section(reference),
         guidance=f"\n## What has worked so far\n\n{guidance}\n" if guidance else "",
     )
     return system, _lead_block(lead)
@@ -74,6 +84,7 @@ async def draft_scored_leads(
     *,
     batch_size: int = 10,
     guidance: str = "",
+    knowledge_path: Path | None = None,
 ) -> dict[str, int]:
     counts = {"drafted": 0, "failed": 0}
     async with sessionmaker() as session:
@@ -87,7 +98,10 @@ async def draft_scored_leads(
         ).all()
 
         for lead in leads:
-            system, user = build_drafter_prompts(profile, lead, guidance)
+            reference = ""
+            if knowledge_path is not None:
+                reference = await reference_for(session, knowledge_path, lead_query(lead))
+            system, user = build_drafter_prompts(profile, lead, guidance, reference)
             try:
                 drafts = await llm.complete_json(system, user, DraftSet)
             except LLMInvalidReply as exc:

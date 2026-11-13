@@ -86,6 +86,11 @@ class Settings(BaseSettings):
 
     urgent_score: int = 9
     digest_times: CsvList = ["09:00", "18:00"]
+    report_time: str = "18:00"
+
+    auto_daily_limit: int = 10
+    inbox_interval_minutes: int = 5
+    knowledge_path: Path = Path("knowledge")
 
     smtp_host: str = ""
     smtp_port: int = 587

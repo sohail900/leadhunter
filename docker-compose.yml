@@ -29,6 +29,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./profile.yaml:/app/profile.yaml:ro
+      - ./knowledge:/app/knowledge:ro
 
 volumes:
   pgdata:

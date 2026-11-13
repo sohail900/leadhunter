@@ -8,12 +8,20 @@ from telegram import ForceReply, Update
 from telegram.ext import ApplicationHandlerStop, ContextTypes
 
 from leadhunter import state
-from leadhunter.bot import connect, formatting
+from leadhunter.agent import conversation as talk
+from leadhunter.bot import connect, deals, formatting
 from leadhunter.bot.delivery import proposal_drafts
 from leadhunter.bot.delivery import reply_html as _reply
-from leadhunter.db.models import Draft, DraftVariant, EventType, Lead, LeadStatus
+from leadhunter.db.models import (
+    ConversationState,
+    Draft,
+    DraftVariant,
+    EventType,
+    Lead,
+    LeadStatus,
+)
 from leadhunter.tracker.events import record_event, set_status
-from leadhunter.tracker.followups import FOLLOWUP_AFTER_DAYS, mark_contacted
+from leadhunter.tracker.followups import FOLLOWUP_AFTER_DAYS, mark_contacted, sent_text_for
 from leadhunter.tracker.stats import collect_stats
 
 log = structlog.get_logger()
@@ -65,12 +73,13 @@ async def leads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _reply(update, formatting.format_leads_list(list(leads), waiting or 0))
 
 
-async def _set_outcome(update: Update, context, status: LeadStatus, done: str) -> None:
-    command = update.effective_message.text.split()[0]
-    if not context.args or not context.args[0].lstrip("#").isdigit():
-        await _reply(update, f"Usage: {command} &lt;lead id&gt;  (see /leads)")
-        return
-    lead_id = int(context.args[0].lstrip("#"))
+OUTCOME_STATES = {
+    LeadStatus.WON: ConversationState.AGREED,
+    LeadStatus.LOST: ConversationState.CLOSED,
+}
+
+
+async def set_outcome(update: Update, context, lead_id: int, status: LeadStatus, done: str) -> None:
     async with context.bot_data["sessionmaker"]() as session:
         lead = await session.get(Lead, lead_id)
         if lead is None:
@@ -80,8 +89,20 @@ async def _set_outcome(update: Update, context, status: LeadStatus, done: str) -
             await _reply(update, f"Lead #{lead_id} is already marked {status.value}.")
             return
         set_status(session, lead, status)
+        conversation = await talk.conversation_for(session, lead.id)
+        if conversation is not None and status in OUTCOME_STATES:
+            conversation.state = OUTCOME_STATES[status]
+            conversation.question = None
         await session.commit()
     await _reply(update, f"Lead #{lead_id} {done}.")
+
+
+async def _set_outcome(update: Update, context, status: LeadStatus, done: str) -> None:
+    command = update.effective_message.text.split()[0]
+    if not context.args or not context.args[0].lstrip("#").isdigit():
+        await _reply(update, f"Usage: {command} &lt;lead id&gt;  (see /leads)")
+        return
+    await set_outcome(update, context, int(context.args[0].lstrip("#")), status, done)
 
 
 async def replied_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -96,7 +117,7 @@ async def lost_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await _set_outcome(update, context, LeadStatus.LOST, "marked as lost")
 
 
-async def _set_paused(update: Update, context, paused: bool) -> None:
+async def set_paused(update: Update, context, paused: bool) -> None:
     async with context.bot_data["sessionmaker"]() as session:
         await state.set_state(session, state.PAUSED, paused)
         record_event(session, EventType.SETTING_CHANGED, key=state.PAUSED, value=paused)
@@ -108,11 +129,11 @@ async def _set_paused(update: Update, context, paused: bool) -> None:
 
 
 async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _set_paused(update, context, True)
+    await set_paused(update, context, True)
 
 
 async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _set_paused(update, context, False)
+    await set_paused(update, context, False)
 
 
 async def threshold_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -142,7 +163,7 @@ async def _deliver(
     if email and mailer:
         subject = formatting.email_subject(lead)
         try:
-            await mailer.send(email, subject, text)
+            message_id = await mailer.send(email, subject, text)
         except (smtplib.SMTPException, OSError) as exc:
             log.error("email_failed", lead_id=lead.id, error=str(exc)[:300])
             note = f"Email to {email} failed ({type(exc).__name__}), so nothing was sent."
@@ -157,6 +178,7 @@ async def _deliver(
                 subject=subject,
                 text=text,
             )
+            await talk.record_sent(session, lead, text, channel=talk.EMAIL, external_id=message_id)
             if kind == "proposal":
                 mark_contacted(session, lead, via="smtp")
                 await session.commit()
@@ -264,9 +286,18 @@ async def mark_sent(update, context, session, lead_id, kind="proposal") -> None:
             await query.edit_message_reply_markup(None)
             return
         mark_contacted(session, lead, via="manual")
+        text = await sent_text_for(session, lead.id)
         answer = f"Marked contacted. Follow-up suggestion in {FOLLOWUP_AFTER_DAYS} days."
     else:
+        followup = await session.scalar(
+            select(Draft)
+            .where(Draft.lead_id == lead.id, Draft.chosen, Draft.variant == DraftVariant.FOLLOWUP)
+            .order_by(Draft.id.desc())
+        )
+        text = followup.text if followup else ""
         answer = "Follow-up marked as sent."
+    if text:
+        await talk.record_sent(session, lead, text, channel=talk.MANUAL)
     record_event(session, EventType.MESSAGE_SENT, lead.id, channel="manual", kind=kind)
     await session.commit()
     await query.answer(answer)
@@ -309,17 +340,20 @@ BUTTONS = {
     "fu": send_followup,
     "fuedit": ask_for_followup_edit,
     "fuskip": skip_followup,
+    **deals.BUTTONS,
 }
 
 
-async def on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     message = update.effective_message
     prompt_text = message.reply_to_message.text or ""
     if await connect.on_reply(update, context, prompt_text):
-        return
+        return True
+    if await deals.on_reply(update, context, prompt_text):
+        return True
     prompt = EDIT_PROMPT.match(prompt_text)
     if not prompt:
-        return
+        return False
     kind = "proposal" if prompt.group(1) == "Proposal" else "followup"
     text = message.text.strip()
 
@@ -327,12 +361,12 @@ async def on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lead = await session.get(Lead, int(prompt.group(2)))
         if lead is None:
             await _reply(update, "That lead no longer exists.")
-            return
+            return True
 
         if kind == "proposal":
             if lead.status not in AWAITING_ME:
                 await _reply(update, f"Lead #{lead.id} is already {lead.status.value}.")
-                return
+                return True
             draft = Draft(lead_id=lead.id, variant=DraftVariant.CUSTOM, text=text, edited_text=text)
             session.add(draft)
             await session.flush()
@@ -348,3 +382,4 @@ async def on_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 )
             )
         await _deliver(update, context, session, lead, text, kind)
+    return True

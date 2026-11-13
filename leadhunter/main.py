@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Update
-from telegram.error import InvalidToken, NetworkError
+from telegram.error import InvalidToken, NetworkError, TelegramError
 from telegram.ext import Application
 
 from leadhunter import jobs
@@ -14,6 +14,7 @@ from leadhunter.bot.app import build_application
 from leadhunter.collectors import build_collectors
 from leadhunter.config import Settings, get_settings, load_profile
 from leadhunter.db.session import get_engine, get_sessionmaker
+from leadhunter.inbox import InboxReader
 from leadhunter.llm.providers import LLMError
 from leadhunter.llm.selection import active_llm
 from leadhunter.log import setup_logging
@@ -43,6 +44,26 @@ def schedule_jobs(scheduler: AsyncIOScheduler, deps: jobs.Deps, settings: Settin
         next_run_time=now + timedelta(seconds=60),
     )
     scheduler.add_job(jobs.followups, "interval", hours=1, args=[deps], id="followups")
+    if deps.inbox is not None:
+        scheduler.add_job(
+            jobs.inbox,
+            "interval",
+            minutes=settings.inbox_interval_minutes,
+            args=[deps],
+            id="inbox",
+            next_run_time=now + timedelta(seconds=90),
+        )
+
+    hour, minute = settings.report_time.split(":")
+    scheduler.add_job(
+        jobs.daily_report,
+        "cron",
+        hour=int(hour),
+        minute=int(minute),
+        args=[deps],
+        id="daily_report",
+        misfire_grace_time=6 * 3600,
+    )
 
     for time_of_day in settings.digest_times:
         hour, minute = time_of_day.split(":")
@@ -89,6 +110,22 @@ async def wait_for_telegram(app: Application, max_delay: float = 60.0) -> None:
             delay = min(delay * 2, max_delay)
 
 
+async def greet_owner(app: Application, chat_id: int) -> None:
+    try:
+        await app.bot.send_message(
+            chat_id,
+            "No model is connected yet, so leads are collected but not scored. "
+            "Send /connect to choose a provider and a model.",
+        )
+    except TelegramError as exc:
+        log.error(
+            "cannot_message_owner",
+            error=str(exc),
+            hint=f"open @{app.bot.username} in Telegram and press Start; if that is done, "
+            "TELEGRAM_CHAT_ID is not your numeric ID (ask @userinfobot)",
+        )
+
+
 async def run() -> None:
     settings = get_settings()
     setup_logging(settings.log_level, settings.log_format)
@@ -100,13 +137,15 @@ async def run() -> None:
 
     profile = load_profile()
     sessionmaker = get_sessionmaker()
-    app = build_application(settings, sessionmaker)
+    app = build_application(settings, sessionmaker, profile=profile)
     deps = jobs.Deps(
         settings=settings,
         profile=profile,
         sessionmaker=sessionmaker,
         bot=app.bot,
         can_email=app.bot_data["mailer"] is not None,
+        mailer=app.bot_data["mailer"],
+        inbox=InboxReader(settings) if InboxReader.is_configured(settings) else None,
     )
     try:
         async with sessionmaker() as session:
@@ -142,11 +181,7 @@ async def run() -> None:
             telegram_proxy=bool(settings.telegram_proxy_url),
         )
         if not llm_connected:
-            await app.bot.send_message(
-                settings.telegram_chat_id,
-                "No model is connected yet, so leads are collected but not scored. "
-                "Send /connect to choose a provider and a model.",
-            )
+            await greet_owner(app, settings.telegram_chat_id)
 
         await stop.wait()
 

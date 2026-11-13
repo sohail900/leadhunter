@@ -67,10 +67,28 @@ class DraftVariant(StrEnum):
 PROPOSAL_VARIANTS = (DraftVariant.SHORT, DraftVariant.PORTFOLIO_LED, DraftVariant.PROBLEM_LED)
 
 
+class ConversationState(StrEnum):
+    ACTIVE = "active"
+    WAITING_OWNER = "waiting_owner"
+    AGREED = "agreed"
+    CLOSED = "closed"
+
+
+class MessageKind(StrEnum):
+    CLIENT = "client"
+    SENT = "sent"
+    DRAFT = "draft"
+    OWNER = "owner"
+
+
 class EventType(StrEnum):
     STATUS_CHANGED = "status_changed"
     MESSAGE_SENT = "message_sent"
     SETTING_CHANGED = "setting_changed"
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 def _str_enum(enum_cls: type[StrEnum], length: int) -> Enum:
@@ -165,3 +183,48 @@ class Followup(Base):
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), index=True)
     due_at: Mapped[datetime] = mapped_column(UtcDateTime)
     done: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (Index("ix_conversations_state", "state"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), unique=True)
+    channel: Mapped[str] = mapped_column(String(20))
+    address: Mapped[str | None] = mapped_column(String(255))
+    client_name: Mapped[str | None] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(Text, default="")
+    state: Mapped[ConversationState] = mapped_column(
+        _str_enum(ConversationState, 20),
+        default=ConversationState.ACTIVE,
+        server_default=ConversationState.ACTIVE.value,
+    )
+    question: Mapped[str | None] = mapped_column(Text)
+    brief: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, default=_now, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, default=_now, onupdate=_now, server_default=func.now()
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id", "external_id", name="uq_messages_conversation_id_external_id"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[MessageKind] = mapped_column(_str_enum(MessageKind, 10))
+    text: Mapped[str] = mapped_column(Text)
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, default=_now, server_default=func.now()
+    )

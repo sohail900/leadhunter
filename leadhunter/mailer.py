@@ -20,12 +20,17 @@ class Mailer:
     def is_configured(settings: Settings) -> bool:
         return bool(settings.smtp_host and (settings.smtp_from or settings.smtp_username))
 
-    def build_message(self, to: str, subject: str, text: str) -> EmailMessage:
+    def build_message(
+        self, to: str, subject: str, text: str, reply_to: str | None = None
+    ) -> EmailMessage:
         message = EmailMessage()
         message["From"] = formataddr((self.from_name, self.from_address))
         message["To"] = to
         message["Subject"] = subject
         message["Message-ID"] = make_msgid(domain=self.from_address.rsplit("@", 1)[-1])
+        if reply_to:
+            message["In-Reply-To"] = reply_to
+            message["References"] = reply_to
         message.set_content(text)
         return message
 
@@ -42,5 +47,7 @@ class Mailer:
                 server.login(self.username, self.password)
             server.send_message(message)
 
-    async def send(self, to: str, subject: str, text: str) -> None:
-        await asyncio.to_thread(self._send_blocking, self.build_message(to, subject, text))
+    async def send(self, to: str, subject: str, text: str, reply_to: str | None = None) -> str:
+        message = self.build_message(to, subject, text, reply_to)
+        await asyncio.to_thread(self._send_blocking, message)
+        return message["Message-ID"]

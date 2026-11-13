@@ -10,8 +10,8 @@ from telegram.ext import (
 )
 from telegram.request import BaseRequest
 
-from leadhunter.bot import connect, handlers
-from leadhunter.config import Settings
+from leadhunter.bot import chat, connect, deals, handlers
+from leadhunter.config import Profile, Settings
 from leadhunter.mailer import Mailer
 
 
@@ -20,6 +20,7 @@ def build_application(
     sessionmaker: async_sessionmaker[AsyncSession],
     request: BaseRequest | None = None,
     mailer: Mailer | None = None,
+    profile: Profile | None = None,
 ) -> Application:
     builder = Application.builder().token(settings.telegram_bot_token).job_queue(None)
     if request is not None:
@@ -36,6 +37,7 @@ def build_application(
         sessionmaker=sessionmaker,
         settings=settings,
         mailer=mailer,
+        profile=profile,
     )
 
     app.add_handler(TypeHandler(Update, handlers.owner_guard), group=-1)
@@ -55,13 +57,17 @@ def build_application(
         "models": connect.models_command,
         "llm": connect.llm_command,
         "disconnect": connect.disconnect_command,
+        "auto": deals.auto_command,
+        "report": deals.report_command,
+        "client": deals.client_command,
     }
     for name, callback in commands.items():
         app.add_handler(CommandHandler(name, callback))
     app.add_handler(CallbackQueryHandler(connect.on_button, pattern=connect.BUTTON_PATTERN))
     app.add_handler(CallbackQueryHandler(handlers.on_button))
     app.add_handler(
-        MessageHandler(filters.TEXT & filters.REPLY & ~filters.COMMAND, handlers.on_text_reply)
+        MessageHandler(filters.TEXT & filters.REPLY & ~filters.COMMAND, chat.on_text_reply)
     )
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat.on_message))
     app.add_error_handler(handlers.on_error)
     return app

@@ -6,6 +6,7 @@ from leadhunter.db.models import AppState
 
 THRESHOLD = "score_threshold"
 PAUSED = "paused"
+AUTO = "auto_send"
 
 
 async def get_state(session: AsyncSession, key: str, default: Any = None) -> Any:
@@ -28,3 +29,7 @@ async def get_threshold(session: AsyncSession, default: int) -> int:
 
 async def is_paused(session: AsyncSession) -> bool:
     return bool(await get_state(session, PAUSED, False))
+
+
+async def is_auto(session: AsyncSession) -> bool:
+    return bool(await get_state(session, AUTO, False))

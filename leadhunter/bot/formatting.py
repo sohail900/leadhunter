@@ -3,7 +3,7 @@ from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from leadhunter.db.models import Draft, Lead
+from leadhunter.db.models import Conversation, Draft, Lead, Message, MessageKind
 from leadhunter.pipeline.scorer import format_budget
 from leadhunter.text import EMAIL_RE
 from leadhunter.tracker.stats import Counts, Stats
@@ -27,8 +27,30 @@ VARIANT_NAMES = {
     "followup": "follow-up",
 }
 
+REFUSAL = (
+    "I only work on lead hunting: finding projects, talking to clients, prices and reports. "
+    "I can't help with that. Send /help to see what I can do."
+)
+STATE_NAMES = {
+    "active": "in conversation",
+    "waiting_owner": "waiting for your answer",
+    "agreed": "deal agreed",
+    "closed": "closed",
+}
+SPEAKERS = {
+    MessageKind.CLIENT: "Client",
+    MessageKind.SENT: "Sent",
+    MessageKind.DRAFT: "Draft, not sent",
+    MessageKind.OWNER: "Your instruction",
+}
+
 HELP_TEXT = (
     "<b>LeadHunter</b>\n\n"
+    "You can write to me in plain words, for example “what is open?”, "
+    "“tell #12 the price is 800” or “show lead 12”. I only do lead hunting.\n\n"
+    "/report - today's report (also sent every evening)\n"
+    "/auto on|off - send first messages and replies to clients without asking me\n"
+    "/client &lt;id&gt; &lt;text&gt; - what a client wrote to me outside email\n"
     "/stats - results per source and per draft variant\n"
     "/leads - open leads\n"
     "/replied &lt;id&gt; - the client replied\n"
@@ -207,3 +229,132 @@ def format_leads_list(leads: list[Lead], waiting_for_digest: int) -> str:
     if waiting_for_digest:
         lines += ["", f"{waiting_for_digest} more drafted and waiting for the next digest."]
     return "\n".join(lines)
+
+
+def shorten(text: str, limit: int) -> str:
+    text = text.strip()
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def client_line(conversation: Conversation) -> str:
+    parts = [p for p in (conversation.client_name, conversation.address) if p]
+    return "Client: " + escape(" · ".join(dict.fromkeys(parts)) or "unknown")
+
+
+def _conversation_head(title: str, lead: Lead, conversation: Conversation) -> list[str]:
+    return [
+        f"<b>{title} · lead #{lead.id}</b>",
+        f"<b>{escape(shorten(lead.title, 200))}</b>",
+        client_line(conversation),
+        _link(lead),
+    ]
+
+
+def _client_wrote(client_text: str) -> list[str]:
+    return ["", "<b>Client wrote</b>", escape(shorten(client_text, 1200))] if client_text else []
+
+
+def question_keyboard(lead_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Answer", callback_data=f"cans:{lead_id}"),
+                InlineKeyboardButton("Write the reply myself", callback_data=f"cown:{lead_id}"),
+            ]
+        ]
+    )
+
+
+def draft_keyboard(message_id: int, lead_id: int, sends_email: bool) -> InlineKeyboardMarkup:
+    send = "Send" if sends_email else "Mark as sent"
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(send, callback_data=f"csend:{message_id}")],
+            [
+                InlineKeyboardButton("Write it myself", callback_data=f"cown:{lead_id}"),
+                InlineKeyboardButton("Skip", callback_data=f"cskip:{message_id}"),
+            ],
+        ]
+    )
+
+
+def format_owner_question(
+    lead: Lead, conversation: Conversation, client_text: str, question: str
+) -> str:
+    lines = _conversation_head("Client question", lead, conversation)
+    if conversation.brief:
+        lines += ["", "<b>Project</b>", escape(shorten(conversation.brief, 700))]
+    lines += _client_wrote(client_text)
+    lines += [
+        "",
+        "<b>Needs your answer</b>",
+        escape(shorten(question, 600)),
+        "",
+        "Reply to this message with your answer, for example the price. I will write it to "
+        "the client.",
+    ]
+    return "\n".join(lines)
+
+
+def format_reply_draft(
+    lead: Lead,
+    conversation: Conversation,
+    client_text: str,
+    text: str,
+    sends_email: bool,
+    note: str = "",
+) -> str:
+    lines = _conversation_head("Reply to client", lead, conversation)
+    if note:
+        lines.append(escape(note))
+    lines += _client_wrote(client_text)
+    lines += ["", "<b>My reply</b>", f"<pre>{escape(shorten(text, 1800))}</pre>", ""]
+    lines.append(
+        "Send it, or reply to this message to tell me what to change."
+        if sends_email
+        else "I cannot send on this channel: send it yourself, then mark it as sent. "
+        "Reply to this message to tell me what to change."
+    )
+    return "\n".join(lines)
+
+
+def format_sent_notice(lead: Lead, conversation: Conversation, text: str, first: bool) -> str:
+    title = "First message sent" if first else "Replied to client"
+    lines = _conversation_head(title, lead, conversation)
+    lines += ["", f"<pre>{escape(shorten(text, 2500))}</pre>"]
+    return "\n".join(lines)
+
+
+def format_deal(
+    lead: Lead, conversation: Conversation, instructions: list[str], last_client_text: str
+) -> str:
+    lines = _conversation_head("Deal agreed", lead, conversation)
+    lines += ["", "<b>Project brief</b>", escape(shorten(conversation.brief or lead.title, 1200))]
+    if instructions:
+        lines += ["", "<b>What you told me (price and terms)</b>"]
+        lines += [f"• {escape(shorten(text, 300))}" for text in instructions[-5:]]
+    lines += _client_wrote(last_client_text)
+    lines += ["", f"The lead is marked won. If that is wrong, send /lost {lead.id}."]
+    return "\n".join(lines)
+
+
+def format_client_lost(lead: Lead, conversation: Conversation, client_text: str) -> str:
+    lines = _conversation_head("Client declined", lead, conversation)
+    lines += _client_wrote(client_text)
+    lines += ["", "The lead is marked lost and I have stopped replying."]
+    return "\n".join(lines)
+
+
+def format_conversation(
+    lead: Lead, conversation: Conversation | None, messages: list[Message], can_email: bool
+) -> str:
+    lines = [lead_header(lead, can_email)]
+    if conversation is None:
+        lines += ["", f"Status: {lead.status.replace('_', ' ')}. No conversation yet."]
+        return "\n".join(lines)
+    lines += ["", client_line(conversation), f"Status: {STATE_NAMES[conversation.state]}"]
+    if conversation.brief:
+        lines += ["", "<b>Project</b>", escape(shorten(conversation.brief, 600))]
+    for message in messages[-6:]:
+        lines += ["", f"<b>{SPEAKERS[message.kind]}</b>", escape(shorten(message.text, 400))]
+    return "\n".join(lines)[:TELEGRAM_LIMIT]

@@ -3,8 +3,8 @@ You write first-contact proposals for one solo full-stack freelancer replying to
 ## The freelancer's profile
 
 {profile}
-
-This profile is everything you know about the freelancer. Do not mention a skill, project, client, number, or year of experience that is not written in it. If the post asks for something the profile does not cover, either leave it out or say plainly that it would be new to them; never bluff. An invented claim that a client later checks costs the freelancer the job and their reputation.
+{knowledge}
+The profile, and the reference material below it when there is any, is everything you know about the freelancer. Do not mention a skill, project, client, number, or year of experience that is not written there. If the post asks for something the profile does not cover, either leave it out or say plainly that it would be new to them; never bluff. An invented claim that a client later checks costs the freelancer the job and their reputation.
 
 ## Write three variants
 

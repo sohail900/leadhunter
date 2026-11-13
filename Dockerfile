@@ -15,6 +15,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY alembic.ini profile.yaml ./
+COPY knowledge ./knowledge
 COPY leadhunter ./leadhunter
 
 RUN useradd --create-home --uid 1000 app && chown -R app:app /app
