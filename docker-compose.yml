@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-leadhunter}:${POSTGRES_PASSWORD:-leadhunter}@db:5432/${POSTGRES_DB:-leadhunter}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
